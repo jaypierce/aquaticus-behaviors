@@ -4,5 +4,5 @@
 ./build.sh
 /
 cd missions/defender
-/
+
 ./launch_full_competition (optional time warp)
