@@ -1,0 +1,256 @@
+initialize DEPLOY    = false
+initialize RETURN    = false
+initialize ACTION    = attack
+initialize TAGGED    = false
+initialize CHASE     = false
+initialize HAS_FLAG  = false
+initialize GO_GRAB   = true
+initialize RECOVER   = false
+initialize SNEAK_LOW = true
+initialize SNEAK_HIGH = false
+initialize BASE      = false
+initialize AVOID     = true
+
+  // ACTION = {attack, defend}
+  //
+  //  ROOT
+  //     - INACTIVE
+  //     - ACTIVE
+  //        - STATION-KEEPING
+  //        - RETURN-PAVLAB
+  //
+  //        - ATTACKING
+  //          - TAGGED
+  //          - GO-GRAB
+  //          - GRAB-RETURN
+  //        - DEFENDING
+  //          - LOITERING
+  //          - INTERCEPTING
+
+set MODE = ACTIVE {
+  DEPLOY = true
+} INACTIVE
+
+set MODE = RECOVERING {
+  MODE = ACTIVE
+  RECOVER = true
+}
+  
+set MODE = STATION-KEEPING {
+  MODE = ACTIVE
+  STATION_KEEP = true
+}
+
+
+set MODE = RETURN-PAVLAB {
+  MODE = ACTIVE
+  RETURN = true
+} 
+
+// ATTACKING MODES
+set MODE = ATTACKING {
+  MODE = ACTIVE
+  ACTION = attack
+}
+
+set MODE = TAGGED {
+  MODE = ACTIVE:ATTACKING
+  TAGGED = true
+} 
+
+set MODE = GO-GRAB {
+  MODE = ACTIVE:ATTACKING
+  HAS_FLAG = false
+  GO_GRAB  = true
+} GRAB-RETURN
+
+// DEFENDING MODES
+set MODE = DEFENDING {
+    MODE = ACTIVE
+  ACTION = defend
+}
+
+set MODE = LOITERING {
+    MODE = ACTIVE:DEFENDING
+  CHASE = false
+} INTERCEPT
+
+//----------------------------------------------
+Behavior = BHV_StationKeep
+{
+  name      = station_keep
+  pwt       = 100
+  condition = MODE==STATION-KEEPING // example
+
+     center_activate = true
+  hibernation_radius = 5
+        inner_radius = 4
+        outer_radius = 15
+         outer_speed = 5
+       transit_speed = 5
+          swing_time = 4
+  
+        visual_hints = vertex_size = 1     // default
+        visual_hints = edge_color = light_blue // default
+        visual_hints = edge_size = 1       // default
+        visual_hints = label_color = white // default
+        visual_hints = vertex_color = red  // default
+}
+
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name      = waypt_return_base
+  pwt       = 100
+  condition = MODE == RETURN-PAVLAB
+  endflag   = STATION_KEEP = true
+
+  crs_spd_zaic_ratio = 20
+               speed = 2
+              radius = 3.0
+         slip_radius = 15.0
+               point = $(RETURN_POS)
+              repeat = 10
+                lead = 8
+}
+
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name      = waypt_return_grab
+  pwt       = 200
+  condition = MODE == GRAB-RETURN
+  endflag   = GO_GRAB = true
+
+        speed = 2
+       radius = 3.0
+  slip_radius = 15.0
+       points = $(UNTAG_POS)
+       repeat = 10
+         lead = 8
+}
+
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name      = waypt_grab
+  pwt       = 300
+  perpetual = true
+  condition = MODE == GO-GRAB
+  condition = BASE = true
+  endflag   = FLAG_GRAB_REQUEST=vname=$(VNAME)
+  endflag   = GO_GRAB = false
+  endflag   = BASE = false
+
+  
+  
+           speed = 2 // meters per second
+    capture_line = false
+  capture_radius = 5.0
+     slip_radius = 10.0
+          points = $(GRAB_POS)
+}
+
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name      = waypt_untag
+  pwt       = 50
+  perpetual = true
+  condition = MODE == TAGGED
+
+           speed = 2 // meters per second
+    capture_line = false
+  capture_radius = 5.0
+     slip_radius = 5.0
+          points = $(UNTAG_POS)
+}
+
+//----------------------------------------------
+Behavior = BHV_Waypoint //**To go to multiple points**
+{ 
+  name      = waypt_sneak_high
+  pwt       = 50
+  perpetual = true
+  condition = MODE == GO-GRAB
+  condition = SNEAK_LOW = false
+  condition = SNEAK_HIGH = true
+  condition = BASE = false
+  endflag   = SNEAK_LOW = true
+  endflag   = SNEAK_HIGH = false
+  endflag   = BASE = true
+
+  updates    = WPT_UPDATE
+  perpetual  = true
+
+      speed_alt = 1.2
+  use_alt_speed = true
+    //            lead = 8
+    //     lead_damper = 1
+    //   lead_to_start = true
+               speed = 12   // meters per second
+    //    capture_line = true
+      capture_radius = 5.0
+         slip_radius = 15.0
+  efficiency_measure = all
+
+             polygon = -41,-34 : -72,-48  //CHANGE THESE POINTS
+
+               order = normal
+             repeat  = 0
+}
+
+//----------------------------------------------
+Behavior = BHV_Waypoint //**To go to multiple points**
+{ 
+  name      = waypt_sneak_low
+  pwt       = 50
+  perpetual = true
+  condition = MODE == GO-GRAB
+  condition = BASE = false
+  condition = SNEAK_LOW = true
+  condition = SNEAK_HIGH = false
+  endflag   = SNEAK_LOW = false
+  endflag   = SNEAK_HIGH = true
+  endflag   = BASE = true
+
+  updates    = WPT_UPDATE
+  perpetual  = true
+
+  speed_alt = 1.2
+  use_alt_speed = true
+  speed = 12   // meters per second
+  capture_radius = 5.0
+  slip_radius = 15.0
+  efficiency_measure = all
+
+  polygon = -21,-93 : -47,-104 //CHANGE THESE POINTS
+
+  order = normal
+  repeat  = 0
+}
+
+//----------------------------------------------
+Behavior = BHV_AvoidCollision
+{
+  name       = avdcollision_
+  pwt        = 400
+  condition  = AVOID = true
+  updates    = CONTACT_INFO
+  endflag    = CONTACT_RESOLVED = $(CONTACT)
+  templating = spawn
+
+               contact = to-be-set
+      on_no_contact_ok = true
+           extrapolate = true
+                 decay = 15,30 //30,60
+
+        pwt_outer_dist = 20 // 40
+        pwt_inner_dist = 11 //15
+        completed_dist = 60
+     min_util_cpa_dist = 15 //10 //15
+     max_util_cpa_dist = 25 //20 //25
+             pwt_grade = linear
+   bearing_line_config = white:0, green:0.65, yellow:0.8, red:1.0
+
+}
